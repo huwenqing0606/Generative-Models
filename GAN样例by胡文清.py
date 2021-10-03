@@ -2,7 +2,7 @@
 用生成对抗网络生成MNIST手写数字样本的样例程序
 运行环境: Keras and Tensorflow 1.14
 参考文献: Goodfellow, I. et al, Generative Adversarial Nets, NIPS 2014
-作者: Wenqing Hu (Missouri S&T)
+Author: Wenqing Hu (Missouri S&T)
 """
 
 from keras.models import Sequential
@@ -146,7 +146,7 @@ def GAN_train(train_inputs, BATCH_SIZE):
     D.trainable = True
     D.compile(loss='binary_crossentropy', optimizer=D_optimizer)
     # 训练若干个epoch
-    # 计算一个epoch所需要的迭代数量，即训练样本数除batchsize的值取整；其中shape[0]就是读取矩阵第一维度的长度
+    # 计算一个epoch所需要的迭代数量，即训练样本数除batchsize的值取整
     train_size = len(train_inputs)
     num_iteration = int(train_size/BATCH_SIZE)#int(comb(len(train_inputs), BATCH_SIZE))
     for epoch in range(10):
@@ -179,7 +179,7 @@ def GAN_train(train_inputs, BATCH_SIZE):
             G_loss = D_compose_G.train_on_batch(noise, [1] * BATCH_SIZE)
             # 解锁判别器可训练
             D.trainable = True
-            print("epoch %d maximum iteration %d batch number %d generator_loss     : %f" % (epoch, num_iteration, index, G_loss))
+            print("epoch %d maximum iteration %d batch number %d generator_loss : %f" % (epoch, num_iteration, index, G_loss))
             
             # 每经过100次迭代输出一张生成的图片
             if index % 100 == 0:
@@ -187,7 +187,7 @@ def GAN_train(train_inputs, BATCH_SIZE):
                 image = image*127.5+127.5
                 Image.fromarray(image.astype(np.uint8)).save(workpath+"\\images\\"+str(epoch)+"_"+str(index)+".png")
             
-            #每100次迭代保存一次生成器和判别器的权重
+            # 每100次迭代保存一次生成器和判别器的权重
             if index % 100 == 9:
                 G.save_weights('generator', True)
                 D.save_weights('discriminator', True)
