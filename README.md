@@ -1,3 +1,3 @@
-<b> Generative Models <\b>
+<b> Generative Models </b>
   
 Examples of Generative Models, such as GAN and VAE
