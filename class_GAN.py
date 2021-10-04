@@ -72,6 +72,9 @@ class GAN:
         D.trainable = True
         D.compile(loss='binary_crossentropy', optimizer=D_optimizer)
         # start training epochs
+        # record discriminator loss D_loss and generator loss G_loss as two arrays to return
+        D_loss_record = []
+        G_loss_record = []
         for epoch in range(num_epoch):
             # iteration within each epoch
             for index in range(num_iter):
@@ -97,6 +100,7 @@ class GAN:
                 # train the discriminator using (X, y) and update the hyperparameters of D
                 D_loss = D.train_on_batch(X, y)
                 print("epoch %d maximum iteration %d batch number %d discriminator_loss : %f" % (epoch, num_iter, index, D_loss))
+                D_loss_record.append(D_loss)
 
                 ##### train generator G #####
                 # generate Z_1,...,Z_{BATCH_SIZE}
@@ -108,14 +112,29 @@ class GAN:
                 # unlock the discriminator D as trainable
                 D.trainable = True
                 print("epoch %d maximum iteration %d batch number %d generator_loss : %f" % (epoch, num_iter, index, G_loss))                                
+                G_loss_record.append(G_loss)
 
         # save the G and D weights
         G.save_weights('generator', True)
         D.save_weights('discriminator', True)
 
-        return None
+        return D_loss_record, G_loss_record
     
 
     # Generate samples using the trained GAN generator
-    def generate(self):
-        return None
+    # num is the total number of i.i.d samples being generated
+    def generate(self, num):
+        # load the trained weights 
+        G = self.G
+        G.compile(loss='binary_crossentropy', optimizer="SGD")
+        G.load_weights('generator')
+        D = self.D
+        D.compile(loss='binary_crossentropy', optimizer="SGD")
+        D.load_weights('discriminator')
+        # generate noise, i.e. the hidden variables Z
+        noise = self.noise_generator(num)
+        # generate samples using the trained GAN generator
+        # verbose=1 means that we output log
+        generated_samples = G.predict(noise, verbose=0)
+        # output the generated samples
+        return generated_samples
