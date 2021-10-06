@@ -2,7 +2,7 @@
 用生成对抗网络生成MNIST手写数字样本的样例程序
 运行环境: Keras and Tensorflow 1.14
 参考文献: Goodfellow, I. et al, Generative Adversarial Nets, NIPS 2014
-作者：胡文清（明略科技）
+作者：胡文清
 """
 
 from keras.models import Sequential
@@ -24,16 +24,7 @@ from class_GAN import GAN
 import matplotlib.pyplot as plt
 
 # 工作路径
-workpath = "D:\\Temporary Files\\2021_08-12_MiningLamp_Project\\1_ID缺失监测方法论\\20210919基于生成模型的IDFA缺失监测\\14_生成对抗网络\\code"
-
-
-"""
-给欣雨的提示：将此代码运用于人口属性特征概率向量的生成，只需要
-    (1) 修改读入的数据 X 为历史人口属性向量，y 为触达特征的分类标签
-    (2) 修改生成器和判别器的神经网络结构
-    (3) 测试不同的训练超参数
-    (4) 直接调用封装好的 GAN 类 class_GAN 中的 GAN
-"""
+workpath = "\\."
 
 
 # 读入数据 X 是图像, y 是标签
