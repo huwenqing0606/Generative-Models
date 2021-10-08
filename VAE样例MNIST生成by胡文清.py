@@ -3,6 +3,13 @@
 运行环境: Keras and Tensorflow 1.14
 参考文献: Kingma, D.P. and Welling, M., Auto-Encoding Variational Bayes, arXiv:1312.6114, Dec. 2013.
 作者：胡文清
+
+单位：明略科技营销事业部综合服务部
+给欣雨的提示：将此代码运用于人口属性特征概率向量的生成，只需要
+    (1) 修改读入的数据 X 为历史人口属性向量，y 为触达特征的分类标签
+    (2) 修改编码器设计层和解码器的神经网络结构
+    (3) 测试不同的训练超参数
+    (4*) 直接调用封装好的 VAE 类 class_VAE 中的 VAE (*目前尚在开发中)
 """
 
 from keras.layers import Conv2D, Conv2DTranspose, Input, Flatten, Dense, Lambda, Reshape
@@ -17,7 +24,7 @@ import math
 from PIL import Image
 
 # 工作路径
-workpath = "\\."
+workpath = "D:\\Temporary Files\\2021_08-12_秒针数据科学\\1_ID缺失监测方法论\\20210919基于生成模型的IDFA缺失监测\\15_变分自编码机\\code"
 
 
 # 读入数据 X 是图像, y 是标签
@@ -43,22 +50,9 @@ def select_data_with_label(X, y, label_set):
     return X_selected
 
 
-# 重参数化层函数，将[mu, sigma]层转换为 Z = mu + eps*sigma 其中 eps ~ N(0, I)
-# 此处仅用于代码分析与测试
-def reparametrization_fn(args):
-    mu, sigma = args
-    batch = K.shape(mu)[0]
-    dim = K.int_shape(mu)[1]
-    eps = K.random_normal(shape=(batch, dim))
-    return mu + K.exp(sigma / 2) * eps
-
-
-# 建立并训练 VAE, 返回网络结构和训练好的超参数
-# 此处仅用于代码分析与测试
-def VAE_train(train_inputs, latent_dim, epochs, batch_size, validation_split):
-    """编码器设计层, 输入数据，输出任意维数的张量"""
-    # 输入层
-    i = Input(shape=(28,28,1), name='encoder_input')
+# 编码器设计层
+# 接受输入数据，产生设计层输出张量
+def encoder_design(i):
     # 添加一个2维卷积层，卷积核大小为3×3，激活函数为relu，卷积步长为2，填充至与输入尺寸相等
     # 输入shape在‘channels_first’模式下为（samples,channels，rows，cols, 在‘channels_last’模式下为（samples,rows,cols,channels
     # 输出为 8 维, 即 8 个 3x3 卷积过滤器同时作用
@@ -75,25 +69,14 @@ def VAE_train(train_inputs, latent_dim, epochs, batch_size, validation_split):
     # 添加一个全连接层，输出为20维向量
     x = Dense(20, activation='relu')(x)
     # 添加一个批量归一化层，该层在每个batch上将前一层的激活值重新规范化，即使得其输出数据的均值接近0，其标准差接近1
-    # 返回编码器设计层的输出张量 x
-    x = BatchNormalization(name='encoder_design_output')(x)
-    """
-    编码器[mu, sigma]和重参数化层
-    在设计层基础上加载高斯隐变量 Z 的均值mu和方差sigma层[mu, sigma]，
-    然后加载重参数化层将[mu, sigma]层转换为 Z = mu + eps*sigma 其中 eps ~ N(0, I)
-    """
-    # 添加一个全连接层，输出为隐变量 Z 服从的高斯分布的均值
-    mu = Dense(latent_dim, name='latent_mu')(x)
-    # 添加一个全连接层，输出为隐变量 Z 服从的高斯分布的方差
-    sigma = Dense(latent_dim, name='latent_sigma')(x)
-    # 添加重参数化层，将[mu, sigma]层转换为 Z = mu + eps*sigma 其中 eps ~ N(0, I)
-    Z = Lambda(reparametrization_fn, output_shape=(latent_dim, ), name='Z')([mu, sigma])
-    """构建并审阅编码器"""
-    encoder = Model(i, [mu, sigma, Z], name='encoder')
-    encoder.summary()    
-    """解码器，输入高斯隐变量Z，输出生成的数据"""
-    # 获取编码器卷积层的尺寸参数用于解码
-    conv_shape = K.int_shape(cx)
+    encoder_design_output = BatchNormalization(name='encoder_design_output')(x)
+    # 返回编码器设计层的输出张量 encoder_design_output
+    return encoder_design_output
+
+
+# 解码器
+# 输入隐含高斯变量，输出生成的数据
+def decoder_model(conv_shape):
     # 解码器输入层
     d_i   = Input(shape=(latent_dim, ), name='decoder_input')
     x     = Dense(conv_shape[1] * conv_shape[2] * conv_shape[3], activation='relu')(d_i)
@@ -104,21 +87,19 @@ def VAE_train(train_inputs, latent_dim, epochs, batch_size, validation_split):
     cx    = Conv2DTranspose(filters=8, kernel_size=3, strides=2, padding='same',  activation='relu')(cx)
     cx    = BatchNormalization()(cx)
     o     = Conv2DTranspose(filters=1, kernel_size=3, activation='sigmoid', padding='same', name='decoder_output')(cx)
-    """构建并审阅解码器"""
-    decoder = Model(d_i, o, name='decoder')
-    decoder.summary()
-    """构建并审阅VAE"""
-    vae_outputs = decoder(encoder(i)[2])
-    vae = Model(i, vae_outputs, name='vae')
-    vae.summary()
-    """编译VAE"""
-    vae.compile(optimizer='adam', loss=vae_loss(mu, sigma))
-    """训练VAE"""
-    vae.fit(train_inputs, train_inputs, epochs = num_epochs, batch_size = batch_size, validation_split = validation_split)
-    """返回训练好的VAE编码器和解码器"""
-    encoder.save_weights('encoder_weights', True)
-    decoder.save_weights('decoder_weights', True)
-    return encoder, decoder
+    # 生成解码器网络模型
+    decoder_model = Model(d_i, o, name='decoder')
+    return decoder_model
+
+
+# 重参数化层函数，将[mu, sigma]层转换为 Z = mu + eps*exp(sigma/2) 其中 eps ~ N(0, I)
+# 此处仅用于代码分析与测试
+def reparametrization_fn(args):
+    mu, sigma = args
+    batch = K.shape(mu)[0]
+    dim = K.int_shape(mu)[1]
+    eps = K.random_normal(shape=(batch, dim))
+    return mu + K.exp(sigma / 2) * eps
 
 
 # VAE损失函数，因为涉及到编码器输出层，所以需要用二层函数嵌套技巧
@@ -136,7 +117,49 @@ def vae_loss(mu, sigma):
         return K.mean(reconstruction_loss + kl_loss)
     return kl_reconstruction_loss
 
-        
+
+# 建立并训练 VAE, 返回网络结构和训练好的超参数
+# 此处仅用于代码分析与测试
+def VAE_train(train_inputs, latent_dim, epochs, batch_size, validation_split):
+    """编码器设计层, 输入数据，输出任意维数的张量"""
+    # 输入层
+    i = Input(shape=(28,28,1), name='encoder_input')
+    # 编码器设计层
+    x = encoder_design(i)
+    """
+    编码器[mu, sigma]和重参数化层
+    在设计层基础上加载高斯隐变量 Z 的均值mu和方差sigma层[mu, sigma]，
+    然后加载重参数化层将[mu, sigma]层转换为 Z = mu + eps*sigma 其中 eps ~ N(0, I)
+    """
+    # 添加一个全连接层，输出为隐变量 Z 服从的高斯分布的均值
+    mu = Dense(latent_dim, name='latent_mu')(x)
+    # 添加一个全连接层，输出为隐变量 Z 服从的高斯分布的方差
+    sigma = Dense(latent_dim, name='latent_sigma')(x)
+    # 添加重参数化层，将[mu, sigma]层转换为 Z = mu + eps*sigma 其中 eps ~ N(0, I)
+    Z = Lambda(reparametrization_fn, output_shape=(latent_dim, ), name='Z')([mu, sigma])
+    """构建并审阅编码器"""
+    encoder = Model(i, [mu, sigma, Z], name='encoder')
+    encoder.summary()    
+    """解码器，输入高斯隐变量Z，输出生成的数据"""
+    # 获取编码器卷积层的尺寸参数用于解码
+    conv_shape = K.int_shape(encoder.get_layer('conv').output)
+    """构建并审阅解码器"""
+    decoder = decoder_model(conv_shape)
+    decoder.summary()
+    """构建并审阅VAE"""
+    vae_outputs = decoder(encoder(i)[2])
+    vae = Model(i, vae_outputs, name='vae')
+    vae.summary()
+    """编译VAE"""
+    vae.compile(optimizer='adam', loss=vae_loss(mu, sigma))
+    """训练VAE"""
+    vae.fit(train_inputs, train_inputs, epochs = num_epochs, batch_size = batch_size, validation_split = validation_split)
+    """返回训练好的VAE编码器和解码器"""
+    encoder.save_weights('encoder_weights', True)
+    decoder.save_weights('decoder_weights', True)
+    return encoder, decoder
+    
+       
 # 生成图片拼接, 即生成器批量生成图像后按照 BATCH_SIZE 拼接成一张图
 # 仅工具程序, 故不作进一步注释
 def combine_images(images):
@@ -153,9 +176,8 @@ def combine_images(images):
 
 
 # VAE 图片生成器
-def vae_generate(decoder, latent_dim):
+def vae_generate(decoder, latent_dim, num_samples):
     decoder.load_weights('decoder_weights')
-    num_samples = 100
     generated_images = []
     for index in range(num_samples):
         Z_sample = np.random.normal(0,1,size=latent_dim)
@@ -176,10 +198,10 @@ if __name__=='__main__':
  
     # 训练VAE
     batch_size = 128
-    num_epochs = 500
+    num_epochs = 300
     validation_split = 0.2
     latent_dim = 2
     encoder, decoder=VAE_train(train_inputs=X_selected, latent_dim=latent_dim, epochs=num_epochs, batch_size=batch_size, validation_split=validation_split)
 
     # 输出生成图片样例
-    vae_generate(decoder, latent_dim)
+    vae_generate(decoder, latent_dim, num_samples=100)
