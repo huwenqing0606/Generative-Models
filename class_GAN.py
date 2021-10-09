@@ -1,6 +1,6 @@
 """
 The GAN training encapsulated in a class
-Environment: Keras and Tensorflow 1.14
+Environment: Keras 2.3.1 and Tensorflow 1.14.0
 Reference: Goodfellow, I. et al, Generative Adversarial Nets, NIPS 2014
 Author: Wenqing Hu (Missouri S&T)
 """
@@ -68,7 +68,7 @@ class GAN:
         # compile the networks using binary cross-entropy loss
         G.compile(loss='binary_crossentropy', optimizer="SGD")
         D_compose_G.compile(loss='binary_crossentropy', optimizer=G_optimizer)
-        # release the discriminator to be trainable and complile it
+        # release the discriminator to be trainable and compile it
         D.trainable = True
         D.compile(loss='binary_crossentropy', optimizer=D_optimizer)
         # start training epochs

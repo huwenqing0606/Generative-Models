@@ -1,8 +1,15 @@
 """
 用生成对抗网络生成MNIST手写数字样本的样例程序
-运行环境: Keras and Tensorflow 1.14
+运行环境: Keras 2.3.1 and Tensorflow 1.14.0
 参考文献: Goodfellow, I. et al, Generative Adversarial Nets, NIPS 2014
 作者：胡文清
+
+单位：明略科技营销事业部综合服务部
+给欣雨的提示：将此代码运用于人口属性特征概率向量的生成，只需要
+    (1) 修改读入的数据 X 为历史人口属性向量，y 为触达特征的分类标签
+    (2) 修改生成器和判别器的神经网络结构
+    (3) 测试不同的训练超参数
+    (4) 直接调用封装好的 GAN 类 class_GAN 中的 GAN
 """
 
 from keras.models import Sequential
@@ -24,7 +31,7 @@ from class_GAN import GAN
 import matplotlib.pyplot as plt
 
 # 工作路径
-workpath = "\\."
+workpath = "D:\\Temporary Files\\2021_08-12_秒针数据科学\\1_ID缺失监测方法论\\20210919基于生成模型的IDFA缺失监测\\14_生成对抗网络\\code"
 
 
 # 读入数据 X 是图像, y 是标签
@@ -99,6 +106,34 @@ def discriminator_model():
     model.add(Dense(1024))
     model.add(Activation('tanh'))
     # 一个结点进行二值分类，并采用sigmoid函数的输出作为概率
+    model.add(Dense(1))
+    model.add(Activation('sigmoid'))
+    return model
+
+
+# 生成网络 G
+def generator_model_fullconnect(input_dim):
+    model = Sequential(name='generator_fully_connected')
+    model.add(Dense(input_dim=input_dim, output_dim=1024))
+    model.add(Activation('relu'))
+    model.add(Dense(128*7*7))
+    model.add(Activation('relu'))
+    model.add(Dense(28*28*1))
+    model.add(Activation('relu'))
+    model.add(Reshape((28,28,1), input_shape=(28*28*1,)))
+    return model
+
+
+# 判别网络 D
+def discriminator_model_fullconnect():
+    model = Sequential(name='discriminator_fully_connected')
+    model.add(Reshape((28*28*1,), input_shape=(28,28,1)))
+    model.add(Dense(28*28*1))
+    model.add(Activation('relu'))
+    model.add(Dense(128*7*7))
+    model.add(Activation('relu'))
+    model.add(Dense(1024))
+    model.add(Activation('relu'))
     model.add(Dense(1))
     model.add(Activation('sigmoid'))
     return model
@@ -203,7 +238,7 @@ if __name__=='__main__':
     X_train, y_train, X_test, y_test = load_data()
     X_selected = select_data_with_label(X_train, y_train, label_set=[6])
     # 检查神经网络结构
-    check_network_arch = 1
+    check_network_arch = 0
     # 检查是否是正确的图像，或直接训练GAN
     check_train_inputs = 0
     # 从测试代码训练
@@ -213,6 +248,10 @@ if __name__=='__main__':
         model.summary()
         model = discriminator_model()
         model.summary()
+        model = generator_model_fullconnect(input_dim=10)
+        model.summary()
+        model = discriminator_model_fullconnect()
+        model.summary()
     elif check_train_inputs:
         for k in range(int(len(X_selected)/100)):
             image = combine_images(np.array(X_selected)[k:k+100])
@@ -221,13 +260,13 @@ if __name__=='__main__':
     elif run_GAN_testcode:
         GAN_train(train_inputs = X_selected, BATCH_SIZE = 12)
     else:
-        noise_dim = 10
+        noise_dim = 2
         BATCH_SIZE = 12
-        train_epoch = 10
+        train_epoch = 1
         # 从封装好的GAN类训练
         # 封装好的GAN类，可以直接调用
-        GAN = GAN(generator = generator_model(input_dim=noise_dim),
-                  discriminator = discriminator_model(),
+        GAN = GAN(generator = generator_model_fullconnect(input_dim=noise_dim),
+                  discriminator = discriminator_model_fullconnect(),
                   noise_dim = noise_dim,
                   noise_type = 'uniform')
         # 训练
@@ -251,5 +290,6 @@ if __name__=='__main__':
         plt.xlabel('iteration')
         plt.ylabel('loss')
         plt.legend(['discriminator', 'generator'], loc='best')
+        plt.savefig(workpath+"\\images\\图_MNIST损失函数.png")
         plt.show()
         
