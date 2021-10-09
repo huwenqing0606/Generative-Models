@@ -3,6 +3,13 @@
 运行环境: Keras 2.3.1 and Tensorflow 1.14.0
 参考文献: Kingma, D.P. and Welling, M., Auto-Encoding Variational Bayes, arXiv:1312.6114, Dec. 2013.
 作者：胡文清
+
+单位：明略科技营销事业部综合服务部
+给欣雨的提示：将此代码运用于人口属性特征概率向量的生成，只需要
+    (1) 修改读入的数据 X 为历史人口属性向量，y 为触达特征的分类标签
+    (2) 修改编码器设计层和解码器的神经网络结构
+    (3) 测试不同的训练超参数
+    (4) 直接调用封装好的 VAE 类 class_VAE 中的 VAE 
 """
 
 from keras.layers import Conv2D, Conv2DTranspose, Input, Flatten, Dense, Lambda, Reshape
@@ -10,15 +17,16 @@ from keras.layers import BatchNormalization
 from keras.models import Model
 from keras.datasets import mnist
 from keras.losses import binary_crossentropy
-from keras.optimizers import SGD
+from keras.optimizers import SGD, Adam
 from keras import backend as K
 import numpy as np
 import matplotlib.pyplot as plt
 import math
 from PIL import Image
+from class_VAE import VAE
 
 # 工作路径
-workpath = "\\."
+workpath = "D:\\Temporary Files\\2021_08-12_秒针数据科学\\1_ID缺失监测方法论\\20210919基于生成模型的IDFA缺失监测\\15_变分自编码机\\code"
 
 
 # 读入数据 X 是图像, y 是标签
@@ -70,7 +78,26 @@ def encoder_design(i):
 
 # 解码器
 # 输入隐含高斯变量，输出生成的数据
-def decoder_model(conv_shape):
+def decoder_model_conv_shape(noise_dim, conv_shape):
+    # 解码器输入层
+    d_i   = Input(shape=(noise_dim, ), name='decoder_input')
+    x     = Dense(conv_shape[1] * conv_shape[2] * conv_shape[3], activation='relu')(d_i)
+    x     = BatchNormalization()(x)
+    x     = Reshape((conv_shape[1], conv_shape[2], conv_shape[3]))(x)
+    cx    = Conv2DTranspose(filters=16, kernel_size=3, strides=2, padding='same', activation='relu')(x)
+    cx    = BatchNormalization()(cx)
+    cx    = Conv2DTranspose(filters=8, kernel_size=3, strides=2, padding='same',  activation='relu')(cx)
+    cx    = BatchNormalization()(cx)
+    o     = Conv2DTranspose(filters=1, kernel_size=3, activation='sigmoid', padding='same', name='decoder_output')(cx)
+    # 生成解码器网络模型
+    decoder_model = Model(d_i, o, name='decoder')
+    return decoder_model
+
+
+# 解码器
+# 输入隐含高斯变量，输出生成的数据
+def decoder_model(noise_dim):
+    conv_shape = (None, 7, 7, 16)
     # 解码器输入层
     d_i   = Input(shape=(noise_dim, ), name='decoder_input')
     x     = Dense(conv_shape[1] * conv_shape[2] * conv_shape[3], activation='relu')(d_i)
@@ -118,7 +145,7 @@ def VAE_loss(mu, sigma):
 def VAE_train(train_inputs, noise_dim, optimizer, BATCH_SIZE, num_epochs, num_iteration):
     ### 编码器设计层, 输入数据，输出任意维数的张量
     # 输入层
-    i = Input(shape=(28,28,1), name='encoder_input')
+    i = Input(shape=np.shape(train_inputs[0]), name='encoder_input')
     # 编码器设计层
     x = encoder_design(i)
     ### 编码器[mu, sigma]和重参数化层
@@ -128,7 +155,7 @@ def VAE_train(train_inputs, noise_dim, optimizer, BATCH_SIZE, num_epochs, num_it
     mu = Dense(noise_dim, name='latent_mu')(x)
     # 添加一个全连接层，输出为隐变量 Z 服从的高斯分布的方差
     sigma = Dense(noise_dim, name='latent_sigma')(x)
-    # 添加重参数化层，将[mu, sigma]层转换为 Z = mu + eps*sigma 其中 eps ~ N(0, I)
+    # 添加重参数化层，将[mu, sigma]层转换为 Z = mu + eps*exp(sigma/2) 其中 eps ~ N(0, I)
     Z = Lambda(reparametrization_fn, output_shape=(noise_dim, ), name='Z')([mu, sigma])
     ### 构建并审阅编码器
     encoder = Model(i, [mu, sigma, Z], name='encoder')
@@ -137,7 +164,8 @@ def VAE_train(train_inputs, noise_dim, optimizer, BATCH_SIZE, num_epochs, num_it
     # 获取编码器卷积层的尺寸参数用于解码
     conv_shape = K.int_shape(encoder.get_layer('conv').output)
     ### 构建并审阅解码器
-    decoder = decoder_model(conv_shape)
+    # 用 conv_shape 未知的 decoder_model
+    decoder = decoder_model_conv_shape(noise_dim, conv_shape)
     decoder.summary()
     ### 构建并审阅VAE
     vae_outputs = decoder(encoder(i)[2])
@@ -147,12 +175,14 @@ def VAE_train(train_inputs, noise_dim, optimizer, BATCH_SIZE, num_epochs, num_it
     vae.compile(optimizer=optimizer, loss=VAE_loss(mu, sigma))
     ### 训练VAE
     # 训练若干个epoch
+    loss_seq=[]
     for epoch in range(num_epochs):
         for index in range(num_iteration):
             # 构建批量训练数据点
             train_inputs_batch = train_inputs[index*BATCH_SIZE:(index+1)*BATCH_SIZE]
             # 训练
             loss = vae.train_on_batch(train_inputs_batch, train_inputs_batch)
+            loss_seq.append(loss)
         # 每epoch保存一次生成器和判别器的权重
         encoder.save_weights('encoder_weights', True)
         decoder.save_weights('decoder_weights', True)
@@ -163,7 +193,7 @@ def VAE_train(train_inputs, noise_dim, optimizer, BATCH_SIZE, num_epochs, num_it
         image = combine_images(generated_images)
         image = image*127.5+127.5
         Image.fromarray(image.astype(np.uint8)).save(workpath+"\\images\\"+str(epoch)+".png")
-    return encoder, decoder
+    return encoder, decoder, loss_seq
     
        
 # VAE 数据生成器
@@ -196,22 +226,20 @@ def combine_images(images):
     return image
 
 
-if __name__=='__main__':
-    # 选择给定标签的MNIST训练图像
-    X_train, y_train, X_test, y_test = load_data()
-    X_selected = select_data_with_label(X_train, y_train, label_set=[6])
- 
+# 测试 VAE_train
+# 此处仅用于代码分析与测试
+def experiment_VAE(train_inputs):
     # 训练VAE
     batch_size = 128
     num_epochs = 50
     noise_dim = 2
-    encoder, decoder=VAE_train(train_inputs=X_selected, 
-                               noise_dim=noise_dim, 
-                               optimizer='adam', #SGD(lr=0.001, momentum=0.9, nesterov=True), 
-                               BATCH_SIZE=batch_size, 
-                               num_epochs=num_epochs,  
-                               num_iteration=int(len(X_selected)/batch_size)
-                              )
+    encoder, decoder, loss_seq = VAE_train(train_inputs=train_inputs, 
+                                           noise_dim=noise_dim, 
+                                           optimizer=Adam(learning_rate=0.01),
+                                           BATCH_SIZE=batch_size, 
+                                           num_epochs=num_epochs,  
+                                           num_iteration=int(len(train_inputs)/batch_size)
+                                          )
 
     # 输出生成图片样例
     generated_images = VAE_generate(decoder, noise_dim, num_samples=100)
@@ -219,3 +247,55 @@ if __name__=='__main__':
     image = combine_images(generated_images)
     image = image*127.5+127.5    
     Image.fromarray(image.astype(np.uint8)).save(workpath+"\\images\\图_MNIST生成图片_VAE.png")    
+
+    # 输出训练损失函数，供调参用
+    plt.plot(loss_seq, color='blue', label='vae_loss')
+    plt.xlabel('iteration')
+    plt.ylabel('loss')
+    plt.legend(['vae_loss'], loc='best')
+    plt.savefig(workpath+"\\images\\图_MNIST损失函数.png")
+    plt.show()
+
+    return None
+
+
+if __name__=='__main__':
+    # 选择给定标签的MNIST训练图像
+    X_train, y_train, X_test, y_test = load_data()
+    X_selected = select_data_with_label(X_train, y_train, label_set=[6])
+    # 测试
+    if (0):
+        # 实验和分析VAE
+        experiment_VAE(train_inputs=X_selected)
+    else:
+        # 调用现成的 class_VAE
+        vae = VAE(train_inputs=X_selected,
+                  noise_dim=2,
+                  encoder_design=encoder_design,
+                  decoder_model=decoder_model
+                 )
+        
+        batch_size = 128
+        num_epochs = 1
+        noise_dim = 2        
+        # 训练
+        encoder, decoder, loss_seq = vae.train(optimizer=Adam(learning_rate=0.01),
+                                               BATCH_SIZE=batch_size, 
+                                               num_epochs=num_epochs, 
+                                               num_iteration=int(len(X_selected)/batch_size)
+                                              )
+        # 输出生成图片样例
+        generated_images = vae.generate(decoder, num_samples=100)
+
+        image = combine_images(generated_images)
+        image = image*127.5+127.5    
+        Image.fromarray(image.astype(np.uint8)).save(workpath+"\\images\\图_MNIST生成图片_VAE.png")    
+
+        # 输出训练损失函数，供调参用
+        plt.plot(loss_seq, color='blue', label='vae_loss')
+        plt.xlabel('iteration')
+        plt.ylabel('loss')
+        plt.legend(['vae_loss'], loc='best')
+        plt.savefig(workpath+"\\images\\图_MNIST损失函数.png")
+        plt.show()
+        
