@@ -17,11 +17,13 @@ class VAE():
     def __init__(self,
                  train_inputs,
                  noise_dim,
+                 data_loss_type,
                  encoder_design,
                  decoder_model
                 ):
         self.train_inputs = train_inputs
         self.noise_dim = noise_dim
+        self.data_loss_type = data_loss_type
         self.encoder_design = encoder_design
         self.decoder_model = decoder_model
 
@@ -42,7 +44,13 @@ class VAE():
     def VAE_loss(self, mu, sigma):
         def kl_reconstruction_loss(true, pred):
             # the reconstruction loss
-            reconstruction_loss = binary_crossentropy(K.flatten(true), K.flatten(pred)) * 28 * 28
+            if self.data_loss_type == 'euclidean':
+                reconstruction_loss =  K.sum(K.square((K.flatten(true)-K.flatten(pred))), axis=-1) 
+            elif self.data_loss_type == 'binarycrossentropy':
+                reconstruction_loss = binary_crossentropy(K.flatten(true), K.flatten(pred))
+            else:
+                print('Error! data_loss_type input euclidean or binarycrossentropy \n')
+                reconstruction_loss = None
             # the KL divergence loss
             kl_loss = 1 + sigma - K.square(mu) - K.exp(sigma)
             kl_loss = K.sum(kl_loss, axis=-1)
