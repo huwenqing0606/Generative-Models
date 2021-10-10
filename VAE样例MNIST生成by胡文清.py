@@ -3,6 +3,13 @@
 运行环境: Keras 2.3.1 and Tensorflow 1.14.0
 参考文献: Kingma, D.P. and Welling, M., Auto-Encoding Variational Bayes, arXiv:1312.6114, Dec. 2013.
 作者：胡文清
+
+单位：明略科技营销事业部综合服务部
+给欣雨的提示：将此代码运用于人口属性特征概率向量的生成，只需要
+    (1) 修改读入的数据 X 为历史人口属性向量，y 为触达特征的分类标签
+    (2) 修改编码器设计层和解码器的神经网络结构
+    (3) 测试不同的训练超参数
+    (4) 直接调用封装好的 VAE 类 class_VAE 中的 VAE 
 """
 
 from keras.layers import Conv2D, Conv2DTranspose, Input, Flatten, Dense, Lambda, Reshape
@@ -16,10 +23,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from PIL import Image
+from scipy.special import comb, perm
 from class_VAE import VAE
 
 # 工作路径
-workpath = "\\."
+workpath = "D:\\Temporary Files\\2021_08-12_秒针数据科学\\1_ID缺失监测方法论\\20210919基于生成模型的IDFA缺失监测\\15_变分自编码机\\code"
 
 
 # 读入数据 X 是图像, y 是标签
@@ -262,34 +270,37 @@ if __name__=='__main__':
         experiment_VAE(train_inputs=X_selected)
     else:
         # 调用现成的 class_VAE
-        vae = VAE(train_inputs=X_selected,
-                  noise_dim=2,
-                  data_loss_type='euclidean', #'binarycrossentropy',
-                  encoder_design=encoder_design,
-                  decoder_model=decoder_model
-                 )
+        vae = VAE(encoder_design=encoder_design,
+                  decoder_model=decoder_model,
+                  noise_dim=2
+                  )
         
-        batch_size = 128
-        num_epochs = 10
-        noise_dim = 2        
+        BATCH_SIZE = 128
+        num_epoch = 100
+        noise_dim = 2
+        train_inputs = X_selected        
         # 训练
-        encoder, decoder, loss_seq = vae.train(optimizer=Adam(learning_rate=0.01),
-                                               BATCH_SIZE=batch_size, 
-                                               num_epochs=num_epochs, 
-                                               num_iteration=int(len(X_selected)/batch_size)
+        encoder, decoder, loss_seq = vae.train(train_inputs=train_inputs,
+                                               optimizer=Adam(learning_rate=0.01),
+                                               recons_loss_type='binary_crossentropy', #'euclidean', 
+                                               BATCH_SIZE=BATCH_SIZE,
+                                               sampling='deterministic_sweep', #'random_uniform',   
+                                               num_epoch=num_epoch, 
+                                               num_iter=int(len(train_inputs)/BATCH_SIZE)  #int(comb(len(train_inputs), BATCH_SIZE))  
                                               )
+        # 生成
+        generated_images = vae.generate(decoder, num=100, data_shape=np.shape(train_inputs[0]))
         # 输出生成图片样例
-        generated_images = vae.generate(decoder, num_samples=100)
-
         image = combine_images(generated_images)
         image = image*127.5+127.5    
         Image.fromarray(image.astype(np.uint8)).save(workpath+"\\images\\图_MNIST生成图片_VAE.png")    
 
         # 输出训练损失函数，供调参用
+        print(loss_seq)
         plt.plot(loss_seq, color='blue', label='vae_loss')
-        plt.xlabel('iteration')
+        plt.xlabel('epoch')
         plt.ylabel('loss')
         plt.legend(['vae_loss'], loc='best')
-        plt.savefig(workpath+"\\images\\图_MNIST损失函数.png")
+        plt.savefig(workpath+"\\images\\图_MNIST损失函数_VAE.png")
         plt.show()
         
